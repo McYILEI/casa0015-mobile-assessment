@@ -1,172 +1,160 @@
-import 'dart:io';
-import 'dart:typed_data';
-import 'dart:ui' show Size;
-
+import 'dart:async';
+import 'dart:ui';
 import 'package:camera/camera.dart';
-import 'package:flutter/services.dart' show DeviceOrientation;
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
-/// Wraps ML Kit pose detection for both static images and live camera frames.
+enum PullUpState { idle, hanging, goingUp, atTop, goingDown, completed }
+
 class PoseDetectorService {
-  PoseDetectorService._();
-  static final PoseDetectorService instance = PoseDetectorService._();
-
-  // Single-image detector for uploaded reference photos.
-  final _staticDetector = PoseDetector(
-    options: PoseDetectorOptions(mode: PoseDetectionMode.single),
+  final PoseDetector _poseDetector = PoseDetector(
+    options: PoseDetectorOptions(
+      model: PoseDetectionModel.accurate,
+      mode: PoseDetectionMode.stream,
+    ),
   );
 
-  // Stream detector (keeps model warm between frames) for live camera.
-  final _streamDetector = PoseDetector(
-    options: PoseDetectorOptions(mode: PoseDetectionMode.stream),
-  );
+  PullUpState _state = PullUpState.idle;
+  int _count = 0;
+  DateTime? _lastCountTime;
+  double? _hangingNoseY;
 
-  bool _isBusy = false;
+  int get count => _count;
+  PullUpState get state => _state;
 
-  /// Detect pose in a static [File] (e.g. gallery image).
-  Future<List<Pose>> detectFromFile(File imageFile) async {
-    final inputImage = InputImage.fromFile(imageFile);
-    return _staticDetector.processImage(inputImage);
-  }
+  final StreamController<int> _countController =
+      StreamController<int>.broadcast();
+  Stream<int> get countStream => _countController.stream;
 
-  /// Detect pose in a [CameraImage] frame from the live camera stream.
-  /// Returns null when the previous frame is still being processed.
-  Future<List<Pose>?> detectFromCameraImage({
-    required CameraImage image,
-    required int sensorOrientation,
-    required CameraLensDirection lensDirection,
-    required DeviceOrientation deviceOrientation,
-  }) async {
-    if (_isBusy) return null;
-    _isBusy = true;
+  bool _isProcessing = false;
+
+  Future<void> processImage(CameraImage image, InputImageRotation rotation) async {
+    if (_isProcessing) return;
+    _isProcessing = true;
+
     try {
-      final inputImage = _buildInputImage(
-        image: image,
-        sensorOrientation: sensorOrientation,
-        lensDirection: lensDirection,
-        deviceOrientation: deviceOrientation,
-      );
-      if (inputImage == null) return null;
-      return await _streamDetector.processImage(inputImage);
+      final inputImage = _buildInputImage(image, rotation);
+      if (inputImage == null) return;
+
+      final poses = await _poseDetector.processImage(inputImage);
+      if (poses.isEmpty) return;
+
+      _processPose(poses.first);
+    } catch (_) {
+      // silently ignore errors during pose detection
     } finally {
-      _isBusy = false;
+      _isProcessing = false;
     }
   }
 
-  InputImage? _buildInputImage({
-    required CameraImage image,
-    required int sensorOrientation,
-    required CameraLensDirection lensDirection,
-    required DeviceOrientation deviceOrientation,
-  }) {
-    final rotation =
-        _rotation(sensorOrientation, lensDirection, deviceOrientation);
-    if (rotation == null) return null;
+  InputImage? _buildInputImage(CameraImage image, InputImageRotation rotation) {
+    if (image.planes.isEmpty) return null;
 
-    final imageSize =
-        Size(image.width.toDouble(), image.height.toDouble());
-
-    // Android with ImageFormatGroup.nv21 → single plane NV21.
-    // iOS  with ImageFormatGroup.bgra8888 → single plane BGRA8888.
-    if (image.planes.length == 1) {
-      final format = InputImageFormatValue.fromRawValue(image.format.raw);
-      if (format == null) return null;
-      return InputImage.fromBytes(
-        bytes: image.planes[0].bytes,
-        metadata: InputImageMetadata(
-          size: imageSize,
-          rotation: rotation,
-          format: format,
-          bytesPerRow: image.planes[0].bytesPerRow,
-        ),
-      );
-    }
-
-    // Fallback: YUV_420_888 (3 planes) → manually pack into NV21.
-    if (image.planes.length == 3) {
-      return InputImage.fromBytes(
-        bytes: _yuv420ToNv21(image),
-        metadata: InputImageMetadata(
-          size: imageSize,
-          rotation: rotation,
-          format: InputImageFormat.nv21,
-          bytesPerRow: image.width,
-        ),
-      );
-    }
-
-    return null;
+    final plane = image.planes.first;
+    return InputImage.fromBytes(
+      bytes: plane.bytes,
+      metadata: InputImageMetadata(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        rotation: rotation,
+        format: InputImageFormat.nv21,
+        bytesPerRow: plane.bytesPerRow,
+      ),
+    );
   }
 
-  /// Interleave YUV_420_888 planes into NV21 byte layout (Y‑plane then VU).
-  Uint8List _yuv420ToNv21(CameraImage image) {
-    final yPlane = image.planes[0];
-    final uPlane = image.planes[1];
-    final vPlane = image.planes[2];
+  void _processPose(Pose pose) {
+    final nose = pose.landmarks[PoseLandmarkType.nose];
+    final leftWrist = pose.landmarks[PoseLandmarkType.leftWrist];
+    final rightWrist = pose.landmarks[PoseLandmarkType.rightWrist];
+    final leftShoulder = pose.landmarks[PoseLandmarkType.leftShoulder];
+    final rightShoulder = pose.landmarks[PoseLandmarkType.rightShoulder];
 
-    final w = image.width;
-    final h = image.height;
-    final numPixels = w * h;
-    final nv21 = Uint8List(numPixels + numPixels ~/ 2);
+    // Filter by confidence
+    if (nose == null || nose.likelihood < 0.7) return;
+    if (leftWrist == null || rightWrist == null) return;
+    if (leftWrist.likelihood < 0.7 || rightWrist.likelihood < 0.7) return;
 
-    // Copy Y rows (stride may add padding).
-    for (int row = 0; row < h; row++) {
-      nv21.setRange(
-        row * w,
-        row * w + w,
-        yPlane.bytes,
-        row * yPlane.bytesPerRow,
-      );
+    final noseY = nose.y;
+    final avgWristY = (leftWrist.y + rightWrist.y) / 2;
+    final avgShoulderY = leftShoulder != null && rightShoulder != null
+        ? (leftShoulder.y + rightShoulder.y) / 2
+        : null;
+
+    const threshold = 30.0;
+
+    switch (_state) {
+      case PullUpState.idle:
+        // Detect hanging: wrists are above shoulders
+        if (avgShoulderY != null && avgWristY < avgShoulderY) {
+          _state = PullUpState.hanging;
+          _hangingNoseY = noseY;
+        }
+        break;
+
+      case PullUpState.hanging:
+        // Update hanging nose position baseline
+        _hangingNoseY = noseY;
+        // Detect going up: nose Y decreasing (moving up in pixel coords)
+        if (noseY < avgWristY * 1.3) {
+          _state = PullUpState.goingUp;
+        }
+        break;
+
+      case PullUpState.goingUp:
+        // At top: nose Y <= wrist Y (chin over bar)
+        if (noseY <= avgWristY + threshold) {
+          _state = PullUpState.atTop;
+        }
+        break;
+
+      case PullUpState.atTop:
+        // Going down: nose Y increasing
+        if (noseY > avgWristY + threshold) {
+          _state = PullUpState.goingDown;
+        }
+        break;
+
+      case PullUpState.goingDown:
+        // Completed: nose back near hanging position
+        if (_hangingNoseY != null &&
+            noseY >= _hangingNoseY! - threshold) {
+          final now = DateTime.now();
+          if (_lastCountTime == null ||
+              now.difference(_lastCountTime!).inMilliseconds >= 1000) {
+            _count++;
+            _lastCountTime = now;
+            _countController.add(_count);
+          }
+          _state = PullUpState.hanging;
+          _hangingNoseY = noseY;
+        }
+        break;
+
+      case PullUpState.completed:
+        break;
     }
-
-    // Interleave V then U (NV21 = Y + VU).
-    int uvIdx = numPixels;
-    final uvH = h ~/ 2;
-    final uvW = w ~/ 2;
-    final vStride = vPlane.bytesPerPixel ?? 2;
-    final uStride = uPlane.bytesPerPixel ?? 2;
-    for (int row = 0; row < uvH; row++) {
-      for (int col = 0; col < uvW; col++) {
-        final vIdx = row * vPlane.bytesPerRow + col * vStride;
-        final uIdx = row * uPlane.bytesPerRow + col * uStride;
-        nv21[uvIdx++] = vPlane.bytes[vIdx];
-        nv21[uvIdx++] = uPlane.bytes[uIdx];
-      }
-    }
-
-    return nv21;
   }
 
-  InputImageRotation? _rotation(
-    int sensorOrientation,
-    CameraLensDirection lensDirection,
-    DeviceOrientation deviceOrientation,
-  ) {
-    final deviceRotations = {
-      DeviceOrientation.portraitUp: 0,
-      DeviceOrientation.landscapeLeft: 90,
-      DeviceOrientation.portraitDown: 180,
-      DeviceOrientation.landscapeRight: 270,
-    };
-
-    final deviceRot = deviceRotations[deviceOrientation] ?? 0;
-
-    int compensated;
-    if (Platform.isAndroid) {
-      if (lensDirection == CameraLensDirection.front) {
-        compensated = (sensorOrientation + deviceRot) % 360;
-      } else {
-        compensated = (sensorOrientation - deviceRot + 360) % 360;
-      }
-    } else {
-      compensated = sensorOrientation;
-    }
-
-    return InputImageRotationValue.fromRawValue(compensated);
+  void incrementManual() {
+    _count++;
+    _countController.add(_count);
   }
 
-  void dispose() {
-    _staticDetector.close();
-    _streamDetector.close();
+  void decrementManual() {
+    if (_count > 0) {
+      _count--;
+      _countController.add(_count);
+    }
+  }
+
+  void resetCount() {
+    _count = 0;
+    _state = PullUpState.idle;
+    _hangingNoseY = null;
+    _lastCountTime = null;
+  }
+
+  Future<void> dispose() async {
+    await _poseDetector.close();
+    await _countController.close();
   }
 }

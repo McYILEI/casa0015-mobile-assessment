@@ -1,23 +1,16 @@
-# syl_app
-Still under development
+# sylapp1
 
-# Pose Compare App
+A new Flutter project.
 
-A Flutter-based mobile application that compares user poses with reference images.
+## Getting Started
 
-## Features
+This project is a starting point for a Flutter application.
 
-- Upload a reference pose image
-- Display selected image
-- Multi-page app structure (Home, Upload, Camera, Result, History)
-- Clean UI design using Material 3
+A few resources to get you started if this is your first Flutter project:
 
-## Tech Stack
+- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-- Flutter
-- Dart
-- image_picker (for image selection)
-
-## Project Structure
-
-
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.

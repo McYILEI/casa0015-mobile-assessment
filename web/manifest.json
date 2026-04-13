@@ -1,6 +1,6 @@
 {
-    "name": "syl_app",
-    "short_name": "syl_app",
+    "name": "sylapp1",
+    "short_name": "sylapp1",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

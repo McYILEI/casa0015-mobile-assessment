@@ -1,52 +1,78 @@
 import 'package:flutter/material.dart';
-
-import 'screens/home_page.dart';
+import 'screens/home_screen.dart';
+import 'screens/history_screen.dart';
+import 'screens/stats_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() {
-  runApp(const PoseCompareApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const PullUpTrackerApp());
 }
 
-class PoseCompareApp extends StatelessWidget {
-  const PoseCompareApp({super.key});
+class PullUpTrackerApp extends StatelessWidget {
+  const PullUpTrackerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF3B82F6),
-      brightness: Brightness.light,
-    );
-
     return MaterialApp(
+      title: 'Pull-Up Tracker',
+      theme: AppTheme.dark,
       debugShowCheckedModeBanner: false,
-      title: 'Pose Compare App',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: colorScheme,
-        scaffoldBackgroundColor: const Color(0xFFF7F9FC),
-        appBarTheme: AppBarTheme(
-          centerTitle: true,
-          backgroundColor: colorScheme.surface,
-          foregroundColor: const Color(0xFF1F2937),
-          elevation: 0,
+      home: const MainShell(),
+    );
+  }
+}
+
+class MainShell extends StatefulWidget {
+  const MainShell({super.key});
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _currentIndex = 0;
+
+  static const _screens = [
+    HomeScreen(),
+    HistoryScreen(),
+    StatsScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.border, width: 0.5)),
         ),
-        cardTheme: CardThemeData(
-          color: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: const BorderSide(color: Color(0xFFE5E7EB)),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size.fromHeight(54),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (i) => setState(() => _currentIndex = i),
+          backgroundColor: AppColors.surface,
+          selectedItemColor: AppColors.accent,
+          unselectedItemColor: AppColors.textDim,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bolt),
+              label: 'Train',
             ),
-          ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.list_alt),
+              label: 'History',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bar_chart),
+              label: 'Stats',
+            ),
+          ],
         ),
       ),
-      home: const HomePage(),
     );
   }
 }
