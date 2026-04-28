@@ -38,7 +38,8 @@ Performing pull-ups usually requires both hands to remain engaged, which makes i
 
 ## Demo
 
-<video src="assets/demo.mp4" controls width="320"></video>
+You can view the introduction video directly on GitHub:
+[▶ Watch Demo Video](https://github.com/McYILEI/casa0018/blob/main/assets/demo.mp4)
 
 ---
 
