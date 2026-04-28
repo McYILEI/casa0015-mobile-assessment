@@ -38,7 +38,7 @@ Performing pull-ups usually requires both hands to remain engaged, which makes i
 
 ## Demo
 
-<video src="assets/demo.webm" controls width="320"></video>
+<video src="assets/demo.mp4" controls width="320"></video>
 
 ---
 
