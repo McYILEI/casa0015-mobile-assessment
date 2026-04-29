@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pull-Up Tracker — A Hands-Free AI Workout Assistant</title>
+  <meta name="description" content="A Flutter app that uses your phone's front camera and Google ML Kit pose detection to automatically count pull-ups in real time — no wearable, no manual tapping required." />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* =========================================================
+       TOKENS
+       ========================================================= */
+    :root {
+      --bg:           #0A0E14;
+      --bg-2:         #11161F;
+      --surface:      #151B27;
+      --surface-2:    #1A2231;
+      --border:       #232C42;
+      --border-2:     #2D3850;
+
+      --accent:       #00E5C7;
+      --accent-soft:  #00E5C722;
+      --accent-line:  #00E5C744;
+      --warm:         #FF8E5A;
+
+      --text:         #EEF2FA;
+      --text-2:       #9AA4BC;
+      --text-3:       #5C6680;
+
+      --maxw:         1180px;
+      --radius:       16px;
+      --radius-sm:    10px;
+    }
+
+    /* =========================================================
+       RESET + BASE
+       ========================================================= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Manrope", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    img, svg { display: block; max-width: 100%; }
+    button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+
+    h1, h2, h3, h4 {
+      font-family: "Bricolage Grotesque", sans-serif;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .mono { font-family: "JetBrains Mono", monospace; }
+
+    .container {
+      width: 100%;
+      max-width: var(--maxw);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    section { padding: 96px 0; position: relative; }
+
+    /* =========================================================
+       NAV
+       ========================================================= */
+    .nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      background: rgba(10, 14, 20, 0.65);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .nav.scrolled { border-bottom-color: var(--border); }
+    .nav-inner {
+      max-width: var(--maxw);
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: "Bricolage Grotesque", sans-serif;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+    }
+    .brand-mark {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #00B89C);
+      display: grid; place-items: center;
+      box-shadow: 0 0 24px var(--accent-soft);
+    }
+    .brand-mark svg { width: 18px; height: 18px; color: var(--bg); }
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-links a {
+      color: var(--text-2);
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      padding: 8px 16px;
+      border: 1px solid var(--border-2);
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .nav-cta:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    @media (max-width: 720px) {
+      .nav-links a:not(.nav-cta) { display: none; }
+    }
+
+    /* =========================================================
+       HERO
+       ========================================================= */
+    .hero {
+      padding: 160px 0 120px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .hero-bg::before {
+      content: "";
+      position: absolute;
+      top: -10%; left: 50%;
+      transform: translateX(-50%);
+      width: 80%; height: 80%;
+      background: radial-gradient(ellipse at center, var(--accent-soft) 0%, transparent 60%);
+      filter: blur(40px);
+    }
+    .hero-grid {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 80px 80px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 30%, transparent 80%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 30%, transparent 80%);
+      opacity: 0.4;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      max-width: 880px;
+      margin: 0 auto;
+    }
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px 6px 8px;
+      border: 1px solid var(--border-2);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 13px;
+      color: var(--text-2);
+      margin-bottom: 32px;
+      animation: fadeUp 0.7s ease both;
+    }
+    .hero-pill-tag {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(44px, 7vw, 84px);
+      margin-bottom: 24px;
+      animation: fadeUp 0.8s 0.1s ease both;
+    }
+    .hero h1 .accent {
+      background: linear-gradient(135deg, var(--accent) 0%, #5BFFE2 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p.lede {
+      font-size: clamp(17px, 2vw, 20px);
+      color: var(--text-2);
+      max-width: 640px;
+      margin: 0 auto 40px;
+      animation: fadeUp 0.8s 0.2s ease both;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      animation: fadeUp 0.8s 0.3s ease both;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
+      transition: transform 0.15s, box-shadow 0.2s, background 0.15s, border-color 0.15s;
+      border: 1px solid transparent;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 8px 32px var(--accent-soft);
+    }
+    .btn-primary:hover { box-shadow: 0 12px 40px rgba(0, 229, 199, 0.25); }
+    .btn-ghost {
+      background: var(--surface);
+      border-color: var(--border-2);
+      color: var(--text);
+    }
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Hero device mockup */
+    .hero-device {
+      margin-top: 96px;
+      position: relative;
+      z-index: 2;
+      display: flex;
+      justify-content: center;
+      animation: fadeUp 1s 0.5s ease both;
+    }
+    .device-frame {
+      width: 280px;
+      aspect-ratio: 9 / 19.5;
+      background: linear-gradient(180deg, #11161F, #0A0E14);
+      border: 1px solid var(--border-2);
+      border-radius: 36px;
+      padding: 12px;
+      position: relative;
+      box-shadow:
+        0 40px 80px rgba(0, 0, 0, 0.5),
+        0 0 80px var(--accent-soft);
+    }
+    .device-screen {
+      width: 100%;
+      height: 100%;
+      background: #060A11;
+      border-radius: 26px;
+      padding: 24px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: hidden;
+      position: relative;
+    }
+    .device-status {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--text-2);
+      font-family: "JetBrains Mono", monospace;
+    }
+    .device-title {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 14px;
+      letter-spacing: 0.1em;
+      color: var(--text);
+      margin-top: 4px;
+    }
+    .device-card {
+      background: linear-gradient(135deg, rgba(0, 229, 199, 0.18), rgba(0, 229, 199, 0.05));
+      border: 1px solid var(--accent-line);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .device-card-label { font-size: 10px; color: var(--text-2); letter-spacing: 0.05em; }
+    .device-card-num {
+      font-family: "Bricolage Grotesque", sans-serif;
+      font-weight: 700;
+      font-size: 38px;
+      color: var(--accent);
+      line-height: 1;
+      margin-top: 4px;
+    }
+    .device-card-num small {
+      font-size: 12px; color: var(--text-2); font-weight: 400; margin-left: 4px;
+    }
+    .device-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .device-stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 6px;
+      text-align: center;
+    }
+    .device-stat-icon { font-size: 14px; margin-bottom: 2px; }
+    .device-stat-val { font-size: 13px; font-weight: 700; }
+    .device-stat-lbl { font-size: 9px; color: var(--text-2); }
+    .device-btn {
+      background: var(--accent);
+      color: var(--bg);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 13px;
+      margin-top: auto;
+    }
+
+    /* =========================================================
+       PROBLEM SECTION
+       ========================================================= */
+    .section-tag {
+      display: inline-block;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: clamp(32px, 5vw, 52px);
+      margin-bottom: 24px;
+      max-width: 820px;
+    }
+    .section-lede {
+      font-size: 18px;
+      color: var(--text-2);
+      max-width: 640px;
+      margin-bottom: 56px;
+    }
+
+    .problem {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+    }
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 56px;
+    }
+    .problem-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .problem-card:hover {
+      border-color: var(--border-2);
+      transform: translateY(-2px);
+    }
+    .problem-card-icon {
+      width: 36px; height: 36px;
+      background: var(--surface-2);
+      border-radius: 10px;
+      display: grid; place-items: center;
+      margin-bottom: 14px;
+      color: var(--accent);
+    }
+    .problem-card h4 {
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+    .problem-card p {
+      font-size: 14px;
+      color: var(--text-2);
+    }
+    .problem-card.solution {
+      background: linear-gradient(135deg, rgba(0, 229, 199, 0.12), rgba(0, 229, 199, 0.02));
+      border-color: var(--accent-line);
+    }
+    .problem-card.solution .problem-card-icon {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    /* =========================================================
+       FEATURES
+       ========================================================= */
+    .features {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--bg), var(--bg-2));
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .feature {
+      padding: 28px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at top right, var(--accent-soft), transparent 50%);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .feature:hover {
+      border-color: var(--accent-line);
+      transform: translateY(-3px);
+    }
+    .feature:hover::before { opacity: 1; }
+    .feature-icon {
+      width: 44px; height: 44px;
+      background: var(--surface-2);
+      border: 1px solid var(--border-2);
+      border-radius: 12px;
+      display: grid; place-items: center;
+      margin-bottom: 18px;
+      color: var(--accent);
+    }
+    .feature-icon svg { width: 22px; height: 22px; }
+    .feature h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    .feature p {
+      color: var(--text-2);
+      font-size: 14px;
+    }
+
+    /* =========================================================
+       HOW IT WORKS
+       ========================================================= */
+    .how {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+    }
+    .how-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      counter-reset: step;
+    }
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 24px 24px;
+      position: relative;
+      counter-increment: step;
+    }
+    .step::before {
+      content: counter(step, decimal-leading-zero);
+      position: absolute;
+      top: 16px; right: 18px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--text-3);
+      letter-spacing: 0.08em;
+    }
+    .step h4 {
+      font-size: 17px;
+      margin-bottom: 10px;
+      color: var(--accent);
+    }
+    .step p {
+      font-size: 14px;
+      color: var(--text-2);
+    }
+    .step .step-detail {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--border-2);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+      color: var(--text-3);
+    }
+
+    /* State machine flow */
+    .flow {
+      margin-top: 64px;
+      padding: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow-x: auto;
+    }
+    .flow-label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--text-3);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .flow-track {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: max-content;
+    }
+    .flow-node {
+      padding: 10px 18px;
+      background: var(--surface-2);
+      border: 1px solid var(--border-2);
+      border-radius: 999px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .flow-node.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .flow-arrow {
+      color: var(--text-3);
+      font-size: 16px;
+    }
+    .flow-final {
+      padding: 10px 18px;
+      background: var(--accent);
+      color: var(--bg);
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 13px;
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    /* =========================================================
+       TECH STACK
+       ========================================================= */
+    .tech {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+      background: var(--bg-2);
+    }
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .tech-item {
+      display: flex;
+      gap: 14px;
+      padding: 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: border-color 0.15s;
+    }
+    .tech-item:hover { border-color: var(--accent-line); }
+    .tech-item-icon {
+      width: 36px; height: 36px;
+      flex-shrink: 0;
+      background: var(--surface-2);
+      border-radius: 8px;
+      display: grid; place-items: center;
+      color: var(--accent);
+    }
+    .tech-item-icon svg { width: 18px; height: 18px; }
+    .tech-item-name {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 2px;
+    }
+    .tech-item-role {
+      font-size: 12px;
+      color: var(--text-2);
+    }
+
+    /* =========================================================
+       DATA & PRIVACY
+       ========================================================= */
+    .privacy {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+    }
+    .privacy-card {
+      background: linear-gradient(135deg, var(--surface), var(--surface-2));
+      border: 1px solid var(--border-2);
+      border-radius: 24px;
+      padding: 48px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: center;
+    }
+    .privacy-card h3 {
+      font-size: 32px;
+      margin-bottom: 16px;
+    }
+    .privacy-card p {
+      color: var(--text-2);
+      margin-bottom: 24px;
+    }
+    .privacy-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .privacy-list li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .privacy-list .check {
+      flex-shrink: 0;
+      width: 22px; height: 22px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    .privacy-list strong { color: var(--text); font-weight: 600; display: block; }
+    .privacy-list span { font-size: 14px; color: var(--text-2); }
+    @media (max-width: 760px) {
+      .privacy-card { grid-template-columns: 1fr; padding: 32px; }
+    }
+
+    /* =========================================================
+       DEMO VIDEO
+       ========================================================= */
+    .demo {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+      background: var(--bg-2);
+      text-align: center;
+    }
+    .demo-frame {
+      max-width: 800px;
+      margin: 56px auto 0;
+      aspect-ratio: 16 / 9;
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: 20px;
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .demo-frame:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .demo-frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 30% 40%, var(--accent-soft), transparent 50%),
+        radial-gradient(circle at 70% 60%, rgba(255, 142, 90, 0.1), transparent 50%);
+    }
+    .demo-play {
+      width: 80px; height: 80px;
+      background: var(--accent);
+      color: var(--bg);
+      border-radius: 50%;
+      display: grid; place-items: center;
+      box-shadow: 0 12px 40px var(--accent-soft);
+      position: relative;
+      z-index: 1;
+      transition: transform 0.2s;
+    }
+    .demo-frame:hover .demo-play { transform: scale(1.06); }
+    .demo-play svg { width: 32px; height: 32px; margin-left: 4px; }
+    .demo-caption {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+      color: var(--text-2);
+      letter-spacing: 0.08em;
+      z-index: 1;
+    }
+
+    /* =========================================================
+       FUTURE
+       ========================================================= */
+    .future {
+      padding: 120px 0;
+      border-top: 1px solid var(--border);
+    }
+    .future-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .future-item {
+      padding: 28px 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      position: relative;
+    }
+    .future-item-emoji { font-size: 28px; margin-bottom: 14px; }
+    .future-item h4 { font-size: 16px; margin-bottom: 6px; }
+    .future-item p { font-size: 14px; color: var(--text-2); }
+
+    /* =========================================================
+       CTA
+       ========================================================= */
+    .cta-section {
+      padding: 140px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-section::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, var(--accent-soft) 0%, transparent 60%);
+      filter: blur(60px);
+      pointer-events: none;
+    }
+    .cta-section h2 {
+      font-size: clamp(36px, 6vw, 60px);
+      margin-bottom: 24px;
+      position: relative;
+    }
+    .cta-section p {
+      font-size: 18px;
+      color: var(--text-2);
+      margin-bottom: 40px;
+      position: relative;
+    }
+    .cta-section .hero-actions { position: relative; }
+
+    /* =========================================================
+       FOOTER
+       ========================================================= */
+    footer {
+      padding: 48px 0 64px;
+      border-top: 1px solid var(--border);
+      color: var(--text-3);
+      font-size: 14px;
+    }
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .footer-meta { display: flex; gap: 24px; flex-wrap: wrap; }
+
+    /* =========================================================
+       ANIMATIONS
+       ========================================================= */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    [data-reveal].in {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* =========================================================
+       RESPONSIVE
+       ========================================================= */
+    @media (max-width: 720px) {
+      section { padding: 72px 0; }
+      .hero { padding: 120px 0 80px; }
+      .hero-device { margin-top: 64px; }
+      .privacy-card { padding: 28px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       NAV
+       ============================================================ -->
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="#" class="brand">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 4v16M18 4v16M6 12h12"/>
+          </svg>
+        </span>
+        Pull-Up Tracker
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#tech">Tech</a>
+        <a href="https://github.com/McYILEI/casa0015-mobile-assessment" class="nav-cta" target="_blank" rel="noopener">View on GitHub →</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       HERO
+       ============================================================ -->
+  <header class="hero">
+    <div class="hero-bg">
+      <div class="hero-grid"></div>
+    </div>
+    <div class="container">
+      <div class="hero-content">
+        <span class="hero-pill">
+          <span class="hero-pill-tag">CASA0015</span>
+          Mobile Systems &amp; Interactions · 2025/26
+        </span>
+        <h1>
+          Your phone counts<br/>
+          your <span class="accent">pull-ups</span>.
+        </h1>
+        <p class="lede">
+          A Flutter app that uses your phone's front camera and Google ML Kit pose detection
+          to automatically count pull-ups in real time — no wearable, no manual tapping required.
+        </p>
+        <div class="hero-actions">
+          <a href="https://github.com/McYILEI/casa0015-mobile-assessment" class="btn btn-primary" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2c-3.2.7-3.87-1.36-3.87-1.36-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.25 3.34.95.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18.92-.25 1.9-.38 2.88-.39.98 0 1.96.13 2.88.39 2.19-1.49 3.15-1.18 3.15-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56C20.71 21.39 24 17.08 24 12 24 5.65 18.85.5 12 .5z"/></svg>
+            View Source
+          </a>
+          <a href="#demo" class="btn btn-ghost">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Watch Demo
+          </a>
+        </div>
+      </div>
+
+      <div class="hero-device">
+        <div class="device-frame">
+          <div class="device-screen">
+            <div class="device-status">
+              <span>5:50</span>
+              <span>● ● ●</span>
+            </div>
+            <div class="device-title">PULLUP TRACKER</div>
+            <div class="device-card">
+              <div class="device-card-label">Today's Total</div>
+              <div class="device-card-num">17<small>pull-ups</small></div>
+            </div>
+            <div class="device-stats">
+              <div class="device-stat"><div class="device-stat-icon">🔥</div><div class="device-stat-val">1d</div><div class="device-stat-lbl">Streak</div></div>
+              <div class="device-stat"><div class="device-stat-icon">🏆</div><div class="device-stat-val">9</div><div class="device-stat-lbl">Best</div></div>
+              <div class="device-stat"><div class="device-stat-icon">⭐</div><div class="device-stat-val">9</div><div class="device-stat-lbl">All-time</div></div>
+            </div>
+            <div class="device-btn">⚡ Start Training</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       PROBLEM
+       ============================================================ -->
+  <section class="problem" id="problem" data-reveal>
+    <div class="container">
+      <span class="section-tag">// The Problem</span>
+      <h2 class="section-title">Counting in your head doesn't work.</h2>
+      <p class="section-lede">
+        Every existing way of counting pull-ups breaks the workout. Mental counting fails when you're
+        tired. Gym counters are expensive and stuck in one place. Smart watches get forgotten or
+        run out of charge. We needed something different.
+      </p>
+      <div class="problem-grid">
+        <div class="problem-card">
+          <div class="problem-card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.7 17l.4-2M14.3 17l-.4-2M9 7l3-3 3 3M12 4v12"/><path d="M5 21h14"/></svg>
+          </div>
+          <h4>Lost focus</h4>
+          <p>Counting in your head pulls attention away from form and breathing.</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </div>
+          <h4>Lost count</h4>
+          <p>By rep 8, fatigue makes it surprisingly easy to forget the number.</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          </div>
+          <h4>Forgotten wearables</h4>
+          <p>Smart watches require remembering to wear them — and to charge them.</p>
+        </div>
+        <div class="problem-card solution">
+          <div class="problem-card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+          </div>
+          <h4>The phone is always there.</h4>
+          <p>Mount it. Start it. Forget it. Let the camera count for you.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FEATURES
+       ============================================================ -->
+  <section class="features" id="features" data-reveal>
+    <div class="container">
+      <span class="section-tag">// What it does</span>
+      <h2 class="section-title">Everything you need.<br/>Nothing you don't.</h2>
+
+      <div class="features-grid">
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          </div>
+          <h3>Auto rep counting</h3>
+          <p>The front camera and ML Kit pose detection recognise each full pull-up — fully on device.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+          </div>
+          <h3>Phase-based detection</h3>
+          <p>A five-phase state machine — Idle → Hanging → Ascending → AtTop → Descending — prevents miscounts.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+          </div>
+          <h3>Manual adjustment</h3>
+          <p>Tap +1 or −1 to correct the count any time — never lose data to a missed frame.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v4M16 4v4"/></svg>
+          </div>
+          <h3>Set tracking</h3>
+          <p>Record multiple sets per session. Tap "Next Set" to start a new one without losing context.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <h3>GPS location tagging</h3>
+          <p>Reverse-geocodes your position to a city or district name — stored with each session.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
+          </div>
+          <h3>Stats dashboard</h3>
+          <p>Weekly totals, average per session, cumulative reps, a 7-day bar chart and a 30-session trend line.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>
+          </div>
+          <h3>Session history</h3>
+          <p>Every workout saved locally — date, duration, total reps, per-set breakdown and location.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+          </div>
+          <h3>Pause &amp; resume</h3>
+          <p>Pause mid-session without losing data. Resume when you're ready for the next set.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       HOW IT WORKS
+       ============================================================ -->
+  <section class="how" id="how" data-reveal>
+    <div class="container">
+      <span class="section-tag">// Algorithm</span>
+      <h2 class="section-title">How rep counting actually works.</h2>
+      <p class="section-lede">
+        Four ideas combine to make counting accurate across different bodies, lighting,
+        and movement speeds — without manual calibration.
+      </p>
+
+      <div class="how-steps">
+        <div class="step">
+          <h4>Filtering</h4>
+          <p>Only frames where ML Kit is confident about the body's position are processed.</p>
+          <div class="step-detail">nose &gt; 65% · wrists &gt; 60%</div>
+        </div>
+        <div class="step">
+          <h4>Body-size scaling</h4>
+          <p>A "hang distance" is measured at the start, then all thresholds scale to it — works for tall and short users.</p>
+          <div class="step-detail">baseline = nose ↔ wrist</div>
+        </div>
+        <div class="step">
+          <h4>Anti-bounce</h4>
+          <p>An 800 ms minimum gap between counts removes false positives from small bounces or pauses.</p>
+          <div class="step-detail">debounce = 800ms</div>
+        </div>
+        <div class="step">
+          <h4>State machine</h4>
+          <p>A rep is only counted after the full five-phase cycle has been completed in correct order.</p>
+          <div class="step-detail">5 phases · strict order</div>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="flow-label">// Pull-up cycle</div>
+        <div class="flow-track">
+          <span class="flow-node">Idle</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-node">Hanging</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-node active">Ascending</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-node">AtTop</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-node">Descending</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-final">+1 Rep</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       TECH STACK
+       ============================================================ -->
+  <section class="tech" id="tech" data-reveal>
+    <div class="container">
+      <span class="section-tag">// Built with</span>
+      <h2 class="section-title">A lean, on-device stack.</h2>
+      <p class="section-lede">
+        Everything runs on the phone. No backend, no cloud account, no third-party tracking.
+      </p>
+
+      <div class="tech-grid">
+        <div class="tech-item">
+          <div class="tech-item-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.314 0L2.3 12 6 15.7 21.684.013zM14.3 11.3L7.6 18l6.7 6.7 3.7-3.7-3-3 3-3z"/></svg>
+          </div>
+          <div>
+            <div class="tech-item-name">Flutter / Dart</div>
+            <div class="tech-item-role">Cross-platform UI · SDK 3.10.7</div>
+          </div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+          </div>
+          <div>
+            <div class="tech-item-name">Google ML Kit</div>
+            <div class="tech-item-role">On-device pose detection · 17 keypoints</div>
+          </div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3"/></svg>
+          </div>
+          <div>
+            <div class="tech-item-name">camera</div>
+            <div class="tech-item-role">Continuous front-camera stream</div>
+          </div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+          </div>
+          <div>
+            <div class="tech-item-name">sqflite</div>
+            <div class="tech-item-role">Local SQLite session storage</div>
+          </div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+          </div>
+          <div>
+            <div class="tech-item-name">fl_chart</div>
+            <div class="tech-item-role">Bar &amp; line charts for stats</div>
+          </div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>
+          </div>
+          <div>
+            <div class="tech-item-name">geolocator + geocoding</div>
+            <div class="tech-item-role">GPS → city/district name</div>
+          </div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          </div>
+          <div>
+            <div class="tech-item-name">HapticFeedback</div>
+            <div class="tech-item-role">Vibration on each counted rep</div>
+          </div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-item-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.36.61.99 1 1.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </div>
+          <div>
+            <div class="tech-item-name">provider</div>
+            <div class="tech-item-role">App-wide state management</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PRIVACY
+       ============================================================ -->
+  <section class="privacy" data-reveal>
+    <div class="container">
+      <div class="privacy-card">
+        <div>
+          <span class="section-tag">// Privacy</span>
+          <h3>Privacy by design.</h3>
+          <p>
+            The phone is the only device that ever sees your data. There is no cloud,
+            no account, no analytics — and no way for anyone but you to look at your sessions.
+          </p>
+        </div>
+        <ul class="privacy-list">
+          <li>
+            <span class="check">✓</span>
+            <div>
+              <strong>Camera frames stay on device</strong>
+              <span>Processed in memory, never saved or uploaded.</span>
+            </div>
+          </li>
+          <li>
+            <span class="check">✓</span>
+            <div>
+              <strong>No GPS coordinates stored</strong>
+              <span>Only the city or district name is kept after reverse-geocoding.</span>
+            </div>
+          </li>
+          <li>
+            <span class="check">✓</span>
+            <div>
+              <strong>No accounts, no tracking</strong>
+              <span>The app has no sign-in and no analytics SDKs.</span>
+            </div>
+          </li>
+          <li>
+            <span class="check">✓</span>
+            <div>
+              <strong>Local SQLite only</strong>
+              <span>Session history lives in a single database file on your phone.</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       DEMO
+       ============================================================ -->
+  <section class="demo" id="demo" data-reveal>
+    <div class="container">
+      <span class="section-tag">// See it in action</span>
+      <h2 class="section-title" style="margin: 0 auto 24px;">A 45-second walkthrough.</h2>
+      <p class="section-lede" style="margin-left: auto; margin-right: auto;">
+        Home → History → Stats → live AI counting from 0 to 8 reps → updated total of 17.
+      </p>
+
+      <a href="https://github.com/McYILEI/casa0015-mobile-assessment/blob/main/assets/demo.mp4" class="demo-frame" target="_blank" rel="noopener" aria-label="Watch demo video on GitHub">
+        <div class="demo-play">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <span class="demo-caption">▶ demo.mp4 — 0:45</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FUTURE
+       ============================================================ -->
+  <section class="future" data-reveal>
+    <div class="container">
+      <span class="section-tag">// What's next</span>
+      <h2 class="section-title">Where this goes from here.</h2>
+
+      <div class="future-grid">
+        <div class="future-item">
+          <div class="future-item-emoji">☁️</div>
+          <h4>Cloud sync</h4>
+          <p>Back up sessions and sync progress across multiple devices via Firebase.</p>
+        </div>
+        <div class="future-item">
+          <div class="future-item-emoji">🤝</div>
+          <h4>Social features</h4>
+          <p>Leaderboards, group challenges, and shareable achievements for solo trainers.</p>
+        </div>
+        <div class="future-item">
+          <div class="future-item-emoji">💪</div>
+          <h4>More exercises</h4>
+          <p>Push-ups, squats, sit-ups — by extending the state machine to new movements.</p>
+        </div>
+        <div class="future-item">
+          <div class="future-item-emoji">🥽</div>
+          <h4>AR form coaching</h4>
+          <p>Real-time form guides overlaid on the camera feed to reduce injury risk.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       CTA
+       ============================================================ -->
+  <section class="cta-section" data-reveal>
+    <div class="container">
+      <h2>Mount your phone.<br/>Start training.</h2>
+      <p>Open source. Built in Flutter. Ready to clone and run.</p>
+      <div class="hero-actions">
+        <a href="https://github.com/McYILEI/casa0015-mobile-assessment" class="btn btn-primary" target="_blank" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2c-3.2.7-3.87-1.36-3.87-1.36-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.25 3.34.95.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18.92-.25 1.9-.38 2.88-.39.98 0 1.96.13 2.88.39 2.19-1.49 3.15-1.18 3.15-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56C20.71 21.39 24 17.08 24 12 24 5.65 18.85.5 12 .5z"/></svg>
+          Clone the Repo
+        </a>
+        <a href="https://github.com/McYILEI/casa0015-mobile-assessment/blob/main/README.md" class="btn btn-ghost" target="_blank" rel="noopener">
+          Read the docs →
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <div>
+          Built by <strong style="color: var(--text);">Yilei Shen</strong> — CASA0015 Mobile Systems &amp; Interactions
+        </div>
+        <div class="footer-meta">
+          <span>UCL CASA · 2025/26</span>
+          <a href="https://github.com/McYILEI/casa0015-mobile-assessment" target="_blank" rel="noopener" style="color: var(--accent);">GitHub ↗</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Sticky nav border on scroll
+    const nav = document.getElementById('nav');
+    const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    // Reveal-on-scroll
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+    document.querySelectorAll('[data-reveal]').forEach(el => io.observe(el));
+  </script>
+</body>
+</html>
